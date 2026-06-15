@@ -8,7 +8,7 @@ class Event(models.Model):
     class Status(models.TextChoices):
         DRAFT = 'draft', 'Draft'
         PUBLISHED = 'published', 'Published'
-        CLOSED = 'closed', 'Closed'
+       
 
     organiser = models.ForeignKey(
         settings.AUTH_USER_MODEL,
