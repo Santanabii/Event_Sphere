@@ -50,6 +50,8 @@ INSTALLED_APPS = [
     'events',
     'cloudinary',
     'cloudinary_storage',
+    'payments',          
+    'django_daraja',
 
 ]
 
