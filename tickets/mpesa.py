@@ -25,6 +25,12 @@ def stk_push(phone_number: str, amount: int, account_reference: str, description
     timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
     raw_password = f"{settings.MPESA_SHORTCODE}{settings.MPESA_PASSKEY}{timestamp}"
     password = base64.b64encode(raw_password.encode()).decode()
+     # ADD THESE LINES temporarily
+    print("BASE URL:", settings.MPESA_BASE_URL)
+    print("SHORTCODE:", settings.MPESA_SHORTCODE)
+    print("CONSUMER KEY:", settings.MPESA_CONSUMER_KEY)
+    print("CALLBACK:", settings.MPESA_CALLBACK_URL)
+
     access_token = get_access_token()
 
     url = f"{settings.MPESA_BASE_URL}/mpesa/stkpush/v1/processrequest"
