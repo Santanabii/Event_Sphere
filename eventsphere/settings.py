@@ -31,7 +31,12 @@ SECRET_KEY = os.getenv('SECRET_KEY')
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.getenv('DEBUG') == 'True'
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = [
+    '127.0.0.1',
+    'localhost',
+    'saline-lark-dropout.ngrok-free.dev'
+
+]
 
 
 # Application definition
@@ -49,10 +54,7 @@ INSTALLED_APPS = [
     'users',
     'events',
     'cloudinary',
-    'cloudinary_storage',
-    'payments',          
-    'django_daraja',
-    'django_daraja.mpesa',
+    'cloudinary_storage',          
     'tickets',
 
 
@@ -142,7 +144,8 @@ USE_TZ = True
 STATIC_URL = 'static/'
 
 CORS_ALLOWED_ORIGINS = [
-    "http://localhost:5173",  
+    "http://localhost:5173",
+     "https://saline-lark-dropout.ngrok-free.dev" 
 ]
 
 REST_FRAMEWORK = {
@@ -180,6 +183,10 @@ MPESA_CONSUMER_SECRET = os.getenv('MPESA_CONSUMER_SECRET')
 MPESA_SHORTCODE = os.getenv('MPESA_SHORTCODE', '174379')
 MPESA_EXPRESS_SHORTCODE = os.getenv('MPESA_EXPRESS_SHORTCODE', '174379')
 MPESA_PASSKEY = os.getenv('MPESA_PASSKEY')
+MPESA_BASE_URL = os.getenv('MPESA_BASE_URL', 'https://sandbox.safaricom.co.ke')
+MPESA_INITIATOR_NAME = os.getenv('MPESA_INITIATOR_NAME')
+MPESA_INITIATOR_PASSWORD = os.getenv('MPESA_INITIATOR_PASSWORD')
+MPESA_TEST_PHONE = os.getenv('MPESA_TEST_PHONE')
 
 # Callback URL (very important for testing)
 MPESA_CALLBACK_URL = os.getenv('MPESA_CALLBACK_URL')

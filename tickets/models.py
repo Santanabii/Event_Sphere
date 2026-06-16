@@ -7,10 +7,10 @@ import uuid
 class Ticket(models.Model):
 
     class Status(models.TextChoices):
-        ACTIVE = 'active', 'Active'
-        LISTED = 'listed', 'Listed for Resale'
+        ACTIVE      = 'active',      'Active'
+        LISTED      = 'listed',      'Listed for Resale'
         TRANSFERRED = 'transferred', 'Transferred'
-        USED = 'used', 'Used'
+        USED        = 'used',        'Used'
 
     owner = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -48,9 +48,10 @@ class Ticket(models.Model):
 class MpesaTransaction(models.Model):
 
     class Status(models.TextChoices):
-        PENDING = 'pending', 'Pending'
+        PENDING   = 'pending',   'Pending'
         COMPLETED = 'completed', 'Completed'
-        FAILED = 'failed', 'Failed'
+        FAILED    = 'failed',    'Failed'
+        CANCELLED = 'cancelled', 'Cancelled'  # ← added
 
     ticket = models.OneToOneField(
         Ticket,
@@ -59,11 +60,12 @@ class MpesaTransaction(models.Model):
         null=True,
         blank=True
     )
-    phone_number = models.CharField(max_length=15)
-    amount = models.DecimalField(max_digits=10, decimal_places=2)
+    phone_number        = models.CharField(max_length=15)
+    amount              = models.DecimalField(max_digits=10, decimal_places=2)
     merchant_request_id = models.CharField(max_length=100, blank=True)
     checkout_request_id = models.CharField(max_length=100, blank=True)
-    mpesa_receipt = models.CharField(max_length=100, blank=True)
+    mpesa_receipt       = models.CharField(max_length=100, blank=True)
+    result_desc         = models.TextField(blank=True)   # ← added
     status = models.CharField(
         max_length=20,
         choices=Status.choices,
@@ -86,3 +88,6 @@ class MpesaTransaction(models.Model):
 
     def __str__(self):
         return f"{self.phone_number} - {self.amount} - {self.status}"
+
+    class Meta:
+        ordering = ['-created_at']
