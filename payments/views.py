@@ -27,3 +27,18 @@ def initiate_stk_push(request):
         return JsonResponse(response)
 
     return render(request, 'payments/payment_form.html')  # We'll create this next
+
+@csrf_exempt
+def mpesa_callback(request):
+    if request.method == 'POST':
+        data = json.loads(request.body)
+        print("✅ M-Pesa Callback:", data)   # For debugging
+
+        # Process successful payment here later
+        # Example:
+        # if data['Body']['stkCallback']['ResultCode'] == 0:
+        #     receipt = data['Body']['stkCallback']['CallbackMetadata']['Item'][1]['Value']
+        #     # Update your MpesaTransaction and Ticket model
+
+        return HttpResponse(status=200)
+    return HttpResponse(status=405)

@@ -52,6 +52,9 @@ INSTALLED_APPS = [
     'cloudinary_storage',
     'payments',          
     'django_daraja',
+    'django_daraja.mpesa',
+    'tickets',
+
 
 ]
 
@@ -180,3 +183,6 @@ MPESA_PASSKEY = os.getenv('MPESA_PASSKEY')
 
 # Callback URL (very important for testing)
 MPESA_CALLBACK_URL = os.getenv('MPESA_CALLBACK_URL')
+
+SENDGRID_API_KEY = os.getenv('SENDGRID_API_KEY')
+SENDGRID_SENDER_EMAIL = os.getenv('SENDGRID_SENDER_EMAIL')
