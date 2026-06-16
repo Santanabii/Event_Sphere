@@ -112,3 +112,19 @@ class ResaleOrderSerializer(serializers.ModelSerializer):
             'event_title'
         ]
         read_only_fields = fields
+
+
+class InitiateResalePurchaseSerializer(serializers.Serializer):
+    phone_number = serializers.CharField(max_length=15)
+
+    def validate_phone_number(self, value):
+        if value.startswith('0'):
+            value = '254' + value[1:]
+        elif value.startswith('+'):
+            value = value[1:]
+        if not value.startswith('254'):
+            raise serializers.ValidationError(
+                "Phone number must be a valid Kenyan number."
+            )
+        return value
+

@@ -3,13 +3,15 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from django.db import transaction
 from django.utils import timezone
-from .models import Listing, ResaleOrder
+from .models import Listing, ResaleOrder, ResaleMpesaTransaction
 from .serializers import (
     ListingSerializer,
     CreateListingSerializer,
-    ResaleOrderSerializer
+    ResaleOrderSerializer,
+    InitiateResalePurchaseSerializer
 )
 from tickets.models import Ticket
+from tickets.mpesa import stk_push
 import uuid
 
 
@@ -23,15 +25,12 @@ class CreateListingView(generics.CreateAPIView):
             id=serializer.validated_data['ticket_id'],
             owner=self.request.user
         )
-        # Set expiry to event date
         expires_at = ticket.tier.event.date
 
         with transaction.atomic():
-            # Mark ticket as listed
             ticket.status = 'listed'
             ticket.save()
 
-            # Create listing
             serializer.save(
                 seller=self.request.user,
                 ticket=ticket,
@@ -78,11 +77,9 @@ class CancelListingView(APIView):
             )
 
         with transaction.atomic():
-            # Return ticket to active
             listing.ticket.status = 'active'
             listing.ticket.save()
 
-            # Cancel listing
             listing.status = 'cancelled'
             listing.save()
 
@@ -92,8 +89,11 @@ class CancelListingView(APIView):
         )
 
 
-class PurchaseResaleTicketView(APIView):
-    """Buyer purchases a resale ticket."""
+class InitiateResalePurchaseView(APIView):
+    """
+    Buyer initiates payment for a resale ticket.
+    Sends STK Push to their phone.
+    """
     permission_classes = [permissions.IsAuthenticated]
 
     def post(self, request, pk):
@@ -122,37 +122,109 @@ class PurchaseResaleTicketView(APIView):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        # Calculate fees
-        amount_paid = listing.asking_price
-        platform_fee = amount_paid * 10 / 100  # 10% platform fee
-        seller_payout = amount_paid - platform_fee
-
-        with transaction.atomic():
-            # Generate new QR token for buyer
-            new_token = uuid.uuid4()
-
-            # Transfer ticket ownership
-            ticket = listing.ticket
-            ticket.owner = request.user
-            ticket.qr_token = new_token
-            ticket.status = 'active'
-            ticket.save()
-
-            # Mark listing as sold
-            listing.status = 'sold'
-            listing.save()
-
-            # Create resale order
-            resale_order = ResaleOrder.objects.create(
-                listing=listing,
-                buyer=request.user,
-                amount_paid=amount_paid,
-                platform_fee=platform_fee,
-                seller_payout=seller_payout,
-                new_qr_token=new_token
+        serializer = InitiateResalePurchaseSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(
+                serializer.errors,
+                status=status.HTTP_400_BAD_REQUEST
             )
 
-        return Response(
-            ResaleOrderSerializer(resale_order).data,
-            status=status.HTTP_201_CREATED
+        phone_number = serializer.validated_data['phone_number']
+
+        # Send STK Push
+        mpesa_response = stk_push(
+            phone_number=phone_number,
+            amount=listing.asking_price,
+            account_reference=f"EVSR{listing.id}",
+            description=f"Resale ticket for {listing.ticket.tier.event.title}"
         )
+
+        if mpesa_response.response_code != '0':
+            return Response(
+                {"error": "Failed to initiate payment. Try again."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Create pending resale transaction
+        ResaleMpesaTransaction.objects.create(
+            listing=listing,
+            buyer=request.user,
+            phone_number=phone_number,
+            amount=listing.asking_price,
+            merchant_request_id=mpesa_response.merchant_request_id,
+            checkout_request_id=mpesa_response.checkout_request_id,
+            status='pending'
+        )
+
+        return Response({
+            "message": "Payment initiated. Enter your M-Pesa PIN on your phone.",
+            "checkout_request_id": mpesa_response.checkout_request_id
+        }, status=status.HTTP_200_OK)
+
+
+class ResaleMpesaCallbackView(APIView):
+    """
+    M-Pesa calls this after resale payment completes.
+    Transfers ticket ownership if payment succeeded.
+    """
+    permission_classes = [permissions.AllowAny]
+
+    def post(self, request):
+        data = request.data.get('Body', {}).get('stkCallback', {})
+        result_code = data.get('ResultCode')
+        checkout_request_id = data.get('CheckoutRequestID')
+
+        try:
+            resale_transaction = ResaleMpesaTransaction.objects.get(
+                checkout_request_id=checkout_request_id
+            )
+        except ResaleMpesaTransaction.DoesNotExist:
+            return Response({"error": "Transaction not found."})
+
+        if result_code == 0:
+            items = data.get('CallbackMetadata', {}).get('Item', [])
+            receipt = next(
+                (i['Value'] for i in items if i['Name'] == 'MpesaReceiptNumber'),
+                ''
+            )
+
+            listing = resale_transaction.listing
+            amount_paid = listing.asking_price
+            platform_fee = amount_paid * 10 / 100
+            seller_payout = amount_paid - platform_fee
+
+            with transaction.atomic():
+                # Update transaction
+                resale_transaction.status = 'completed'
+                resale_transaction.mpesa_receipt = receipt
+                resale_transaction.save()
+
+                # Generate new QR token
+                new_token = uuid.uuid4()
+
+                # Transfer ticket ownership
+                ticket = listing.ticket
+                ticket.owner = resale_transaction.buyer
+                ticket.qr_token = new_token
+                ticket.status = 'active'
+                ticket.save()
+
+                # Mark listing as sold
+                listing.status = 'sold'
+                listing.save()
+
+                # Create resale order
+                ResaleOrder.objects.create(
+                    listing=listing,
+                    buyer=resale_transaction.buyer,
+                    amount_paid=amount_paid,
+                    platform_fee=platform_fee,
+                    seller_payout=seller_payout,
+                    new_qr_token=new_token
+                )
+
+        else:
+            resale_transaction.status = 'failed'
+            resale_transaction.save()
+
+        return Response({"ResultCode": 0, "ResultDesc": "Success"})

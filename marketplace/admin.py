@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Listing, ResaleOrder
+from .models import Listing, ResaleOrder, ResaleMpesaTransaction
 
 
 @admin.register(Listing)
@@ -12,3 +12,9 @@ class ListingAdmin(admin.ModelAdmin):
 @admin.register(ResaleOrder)
 class ResaleOrderAdmin(admin.ModelAdmin):
     list_display = ['buyer', 'amount_paid', 'platform_fee', 'seller_payout', 'completed_at']
+
+
+@admin.register(ResaleMpesaTransaction)
+class ResaleMpesaTransactionAdmin(admin.ModelAdmin):
+    list_display = ['phone_number', 'amount', 'status', 'mpesa_receipt', 'created_at']
+    list_filter = ['status']
