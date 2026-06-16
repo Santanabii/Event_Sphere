@@ -139,7 +139,7 @@ class InitiateResalePurchaseView(APIView):
             description=f"Resale ticket for {listing.ticket.tier.event.title}"
         )
 
-        if mpesa_response.response_code != '0':
+        if mpesa_response.get('ResponseCode') != '0':
             return Response(
                 {"error": "Failed to initiate payment. Try again."},
                 status=status.HTTP_400_BAD_REQUEST
@@ -151,8 +151,8 @@ class InitiateResalePurchaseView(APIView):
             buyer=request.user,
             phone_number=phone_number,
             amount=listing.asking_price,
-            merchant_request_id=mpesa_response.merchant_request_id,
-            checkout_request_id=mpesa_response.checkout_request_id,
+            merchant_request_id=mpesa_response.get('MerchantRequestID'),
+            checkout_request_id=mpesa_response.get('CheckoutRequestID'),
             status='pending'
         )
 
