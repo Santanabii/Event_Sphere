@@ -20,6 +20,11 @@ class InitiatePurchaseView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def post(self, request):
+        print("=== PURCHASE REQUEST RECEIVED ===")
+        print("User:", request.user.email)
+        print("Data:", request.data)
+
+   
         serializer = InitiatePurchaseSerializer(data=request.data)
         if not serializer.is_valid():
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
