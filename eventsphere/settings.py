@@ -207,11 +207,9 @@ SENDGRID_SENDER_EMAIL = os.getenv('SENDGRID_SENDER_EMAIL')
 # Django Channels
 ASGI_APPLICATION = 'eventsphere.asgi.application'
 
+
 CHANNEL_LAYERS = {
-    'default': {
-        'BACKEND': 'channels_redis.core.RedisChannelLayer',
-        'CONFIG': {
-            'hosts': [('127.0.0.1', 6379)],
-        },
-    },
+    "default": {
+        "BACKEND": "channels.layers.InMemoryChannelLayer"
+    }
 }

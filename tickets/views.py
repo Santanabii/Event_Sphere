@@ -12,6 +12,7 @@ from .models import Ticket, MpesaTransaction
 from .serializers import TicketSerializer, InitiatePurchaseSerializer
 from .mpesa import stk_push, normalise_phone
 from .utils import send_ticket_email
+from analytics.views import push_analytics_update
 
 logger = logging.getLogger(__name__)
 
@@ -209,6 +210,11 @@ class ScanTicketView(APIView):
 
         ticket.status = Ticket.Status.USED
         ticket.save()
+        # Push live update to organiser dashboard
+        try:
+            push_analytics_update(ticket.tier.event.id)
+        except Exception as e:
+            logger.error("Analytics update failed: %s", e)
 
         return Response({
             "result":  "valid",
