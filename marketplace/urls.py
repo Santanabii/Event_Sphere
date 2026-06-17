@@ -5,7 +5,8 @@ from .views import (
     MyListingsView,
     CancelListingView,
     InitiateResalePurchaseView,
-    ResaleMpesaCallbackView
+    ResaleMpesaCallbackView,
+    ResalePaymentStatusView
 )
 
 urlpatterns = [
@@ -15,4 +16,5 @@ urlpatterns = [
     path('listings/<int:pk>/cancel/', CancelListingView.as_view(), name='cancel-listing'),
     path('listings/<int:pk>/purchase/', InitiateResalePurchaseView.as_view(), name='purchase-resale'),
     path('mpesa/callback/', ResaleMpesaCallbackView.as_view(), name='resale-mpesa-callback'),
+    path('payment-status/<str:checkout_request_id>/', ResalePaymentStatusView.as_view(), name='resale-payment-status'),
 ]

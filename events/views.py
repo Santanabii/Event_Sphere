@@ -17,7 +17,6 @@ class EventListCreateView(generics.ListCreateAPIView):
         return Event.objects.filter(status='published')
 
     def perform_create(self, serializer):
-        # Automatically set the organiser to the logged in user
         serializer.save(organiser=self.request.user)
 
 

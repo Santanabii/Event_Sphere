@@ -1,8 +1,14 @@
+import logging
+import uuid
+
 from rest_framework import generics, permissions, status
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from django.db import transaction
 from django.utils import timezone
+from django.views.decorators.csrf import csrf_exempt
+from django.utils.decorators import method_decorator
+
 from .models import Listing, ResaleOrder, ResaleMpesaTransaction
 from .serializers import (
     ListingSerializer,
@@ -12,7 +18,8 @@ from .serializers import (
 )
 from tickets.models import Ticket
 from tickets.mpesa import stk_push
-import uuid
+
+logger = logging.getLogger(__name__)
 
 
 class CreateListingView(generics.CreateAPIView):
@@ -132,16 +139,23 @@ class InitiateResalePurchaseView(APIView):
         phone_number = serializer.validated_data['phone_number']
 
         # Send STK Push
-        mpesa_response = stk_push(
-            phone_number=phone_number,
-            amount=listing.asking_price,
-            account_reference=f"EVSR{listing.id}",
-            description=f"Resale ticket for {listing.ticket.tier.event.title}"
-        )
+        try:
+            mpesa_response = stk_push(
+                phone_number=phone_number,
+                amount=int(listing.asking_price),
+                account_reference=f"EVSR{listing.id}",
+                description=f"Resale ticket for {listing.ticket.tier.event.title}"
+            )
+        except Exception as exc:
+            logger.exception("Resale STK Push failed: %s", exc)
+            return Response(
+                {"error": "Could not reach M-Pesa. Please try again."},
+                status=status.HTTP_502_BAD_GATEWAY
+            )
 
         if mpesa_response.get('ResponseCode') != '0':
             return Response(
-                {"error": "Failed to initiate payment. Try again."},
+                {"error": mpesa_response.get('ResponseDescription', 'Payment initiation failed.')},
                 status=status.HTTP_400_BAD_REQUEST
             )
 
@@ -151,17 +165,18 @@ class InitiateResalePurchaseView(APIView):
             buyer=request.user,
             phone_number=phone_number,
             amount=listing.asking_price,
-            merchant_request_id=mpesa_response.get('MerchantRequestID'),
-            checkout_request_id=mpesa_response.get('CheckoutRequestID'),
+            merchant_request_id=mpesa_response.get('MerchantRequestID', ''),
+            checkout_request_id=mpesa_response.get('CheckoutRequestID', ''),
             status='pending'
         )
 
         return Response({
             "message": "Payment initiated. Enter your M-Pesa PIN on your phone.",
-            "checkout_request_id": mpesa_response.checkout_request_id
+            "checkout_request_id": mpesa_response.get('CheckoutRequestID')
         }, status=status.HTTP_200_OK)
 
 
+@method_decorator(csrf_exempt, name='dispatch')
 class ResaleMpesaCallbackView(APIView):
     """
     M-Pesa calls this after resale payment completes.
@@ -170,23 +185,30 @@ class ResaleMpesaCallbackView(APIView):
     permission_classes = [permissions.AllowAny]
 
     def post(self, request):
-        data = request.data.get('Body', {}).get('stkCallback', {})
-        result_code = data.get('ResultCode')
-        checkout_request_id = data.get('CheckoutRequestID')
+        stk_callback = request.data.get('Body', {}).get('stkCallback', {})
+        result_code = stk_callback.get('ResultCode')
+        result_desc = stk_callback.get('ResultDesc', '')
+        checkout_request_id = stk_callback.get('CheckoutRequestID', '')
+
+        logger.info(
+            "Resale Callback | CheckoutRequestID=%s | ResultCode=%s",
+            checkout_request_id, result_code
+        )
 
         try:
             resale_transaction = ResaleMpesaTransaction.objects.get(
                 checkout_request_id=checkout_request_id
             )
         except ResaleMpesaTransaction.DoesNotExist:
-            return Response({"error": "Transaction not found."})
+            logger.error("Unknown resale CheckoutRequestID: %s", checkout_request_id)
+            return Response({"ResultCode": 0, "ResultDesc": "Accepted"})
 
         if result_code == 0:
-            items = data.get('CallbackMetadata', {}).get('Item', [])
-            receipt = next(
-                (i['Value'] for i in items if i['Name'] == 'MpesaReceiptNumber'),
-                ''
-            )
+            items = {
+                item['Name']: item.get('Value')
+                for item in stk_callback.get('CallbackMetadata', {}).get('Item', [])
+            }
+            receipt = str(items.get('MpesaReceiptNumber', ''))
 
             listing = resale_transaction.listing
             amount_paid = listing.asking_price
@@ -223,8 +245,38 @@ class ResaleMpesaCallbackView(APIView):
                     new_qr_token=new_token
                 )
 
+        elif result_code == 1032:
+            resale_transaction.status = 'cancelled'
+            resale_transaction.save()
+            logger.info("Resale payment cancelled by user")
+
         else:
             resale_transaction.status = 'failed'
             resale_transaction.save()
+            logger.warning(
+                "Resale payment failed | ResultCode=%s | %s",
+                result_code, result_desc
+            )
 
-        return Response({"ResultCode": 0, "ResultDesc": "Success"})
+        return Response({"ResultCode": 0, "ResultDesc": "Accepted"})
+
+
+class ResalePaymentStatusView(APIView):
+    """Frontend polls this to check if resale M-Pesa callback has arrived."""
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request, checkout_request_id):
+        try:
+            tx = ResaleMpesaTransaction.objects.get(
+                checkout_request_id=checkout_request_id,
+                buyer=request.user
+            )
+            return Response({
+                "status": tx.status,
+                "receipt": tx.mpesa_receipt,
+            })
+        except ResaleMpesaTransaction.DoesNotExist:
+            return Response(
+                {"error": "Transaction not found."},
+                status=status.HTTP_404_NOT_FOUND
+            )
