@@ -57,7 +57,8 @@ INSTALLED_APPS = [
     'cloudinary_storage',          
     'tickets',
     'marketplace',
-
+    'analytics',  
+    'channels', 
 
 ]
 
@@ -201,3 +202,16 @@ MPESA_CALLBACK_URL    = os.getenv('MPESA_CALLBACK_URL')
 
 SENDGRID_API_KEY = os.getenv('SENDGRID_API_KEY')
 SENDGRID_SENDER_EMAIL = os.getenv('SENDGRID_SENDER_EMAIL')
+
+
+# Django Channels
+ASGI_APPLICATION = 'eventsphere.asgi.application'
+
+CHANNEL_LAYERS = {
+    'default': {
+        'BACKEND': 'channels_redis.core.RedisChannelLayer',
+        'CONFIG': {
+            'hosts': [('127.0.0.1', 6379)],
+        },
+    },
+}
