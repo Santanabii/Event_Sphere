@@ -36,7 +36,7 @@ ALLOWED_HOSTS = [
     '127.0.0.1',
     'localhost',
     'saline-lark-dropout.ngrok-free.dev',
-    '.onrender.com',
+    'event-sphere-6nbk.onrender.com'',
 
 ]
 
@@ -162,6 +162,7 @@ STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:5173",
      "https://saline-lark-dropout.ngrok-free.dev" 
+     
 ]
 
 REST_FRAMEWORK = {
