@@ -12,7 +12,6 @@ from .models import Ticket, MpesaTransaction
 from .serializers import TicketSerializer, InitiatePurchaseSerializer
 from .mpesa import stk_push, normalise_phone
 from .utils import send_ticket_email
-from analytics.views import push_analytics_update
 
 logger = logging.getLogger(__name__)
 
@@ -21,18 +20,21 @@ class InitiatePurchaseView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def post(self, request):
-        print("=== PURCHASE REQUEST RECEIVED ===")
-        print("User:", request.user.email)
-        print("Data:", request.data)
-
-   
         serializer = InitiatePurchaseSerializer(data=request.data)
         if not serializer.is_valid():
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
         tier_id      = serializer.validated_data['tier_id']
         phone_number = serializer.validated_data['phone_number']
-        tier         = TicketTier.objects.get(id=tier_id)
+
+        # Use the validated tier stored on the serializer — no second DB hit
+        tier = serializer._tier
+
+        # Normalise & strictly validate the phone number before hitting Daraja
+        try:
+            phone_number = normalise_phone(phone_number)
+        except ValueError as exc:
+            return Response({"error": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
             mpesa_response = stk_push(
@@ -76,9 +78,22 @@ class MpesaCallbackView(APIView):
 
     def post(self, request):
         stk_callback        = request.data.get('Body', {}).get('stkCallback', {})
-        result_code         = stk_callback.get('ResultCode')
-        result_desc         = stk_callback.get('ResultDesc', '')
         checkout_request_id = stk_callback.get('CheckoutRequestID', '')
+        result_desc         = stk_callback.get('ResultDesc', '')
+
+        # Normalise ResultCode — Daraja sends an integer but guard against
+        # strings or a missing key so we never silently drop a successful payment.
+        raw_code = stk_callback.get('ResultCode')
+        if raw_code is None:
+            logger.error("Callback missing ResultCode | CheckoutRequestID=%s", checkout_request_id)
+            return Response({"ResultCode": 0, "ResultDesc": "Accepted"})
+
+        try:
+            result_code = int(raw_code)
+        except (TypeError, ValueError):
+            logger.error("Unparseable ResultCode '%s' | CheckoutRequestID=%s",
+                         raw_code, checkout_request_id)
+            return Response({"ResultCode": 0, "ResultDesc": "Accepted"})
 
         logger.info("Callback | CheckoutRequestID=%s | ResultCode=%s",
                     checkout_request_id, result_code)
@@ -99,19 +114,29 @@ class MpesaCallbackView(APIView):
             receipt = str(items.get('MpesaReceiptNumber', ''))
 
             with transaction.atomic():
-                mpesa_tx.status        = MpesaTransaction.Status.COMPLETED
-                mpesa_tx.mpesa_receipt = receipt
-                mpesa_tx.result_desc   = result_desc
-                mpesa_tx.save()
+                # Lock the tier row to prevent overselling when two callbacks
+                # arrive simultaneously for the last available ticket.
+                tier = TicketTier.objects.select_for_update().get(pk=mpesa_tx.tier_id)
 
-                tier   = mpesa_tx.tier
+                if not tier.is_available:
+                    mpesa_tx.status      = MpesaTransaction.Status.FAILED
+                    mpesa_tx.result_desc = "Ticket tier sold out."
+                    mpesa_tx.save()
+                    logger.warning("Tier %s sold out at callback time | Tx=%s", tier.pk, mpesa_tx.pk)
+                    return Response({"ResultCode": 0, "ResultDesc": "Accepted"})
+
                 ticket = Ticket.objects.create(
                     owner          = mpesa_tx.owner,
                     tier           = tier,
                     purchase_price = tier.price,
                     status         = Ticket.Status.ACTIVE
                 )
-                mpesa_tx.ticket = ticket
+
+                # Single consolidated save for the transaction
+                mpesa_tx.status        = MpesaTransaction.Status.COMPLETED
+                mpesa_tx.mpesa_receipt = receipt
+                mpesa_tx.result_desc   = result_desc
+                mpesa_tx.ticket        = ticket
                 mpesa_tx.save()
 
                 tier.quantity_sold += 1
@@ -176,11 +201,18 @@ class TicketDetailView(generics.RetrieveAPIView):
 
 
 class ScanTicketView(APIView):
+    """Staff-only endpoint: scans a QR token and marks the ticket as used."""
     permission_classes = [permissions.IsAuthenticated]
 
     def post(self, request):
-        qr_token = request.data.get('qr_token')
+        # Restrict to staff / admin users only
+        if not request.user.is_staff:
+            return Response(
+                {"error": "You do not have permission to scan tickets."},
+                status=status.HTTP_403_FORBIDDEN
+            )
 
+        qr_token = request.data.get('qr_token')
         if not qr_token:
             return Response(
                 {"error": "QR token is required."},
@@ -205,13 +237,16 @@ class ScanTicketView(APIView):
         if ticket.status != Ticket.Status.ACTIVE:
             return Response({
                 "result":  "invalid",
-                "message": f"Ticket status is {ticket.status}."
+                "message": f"Ticket status is '{ticket.status}' and cannot be admitted."
             }, status=status.HTTP_400_BAD_REQUEST)
 
         ticket.status = Ticket.Status.USED
         ticket.save()
-        # Push live update to organiser dashboard
+
+        # Push live update to organiser dashboard — imported lazily so a missing
+        # analytics app does not break the entire tickets module on startup.
         try:
+            from analytics.views import push_analytics_update
             push_analytics_update(ticket.tier.event.id)
         except Exception as e:
             logger.error("Analytics update failed: %s", e)

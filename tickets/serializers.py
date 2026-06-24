@@ -41,32 +41,31 @@ class TicketSerializer(serializers.ModelSerializer):
 
 
 class InitiatePurchaseSerializer(serializers.Serializer):
-    tier_id = serializers.IntegerField()
+    tier_id      = serializers.IntegerField()
     phone_number = serializers.CharField(max_length=15)
 
     def validate_tier_id(self, value):
         try:
-            tier = TicketTier.objects.get(id=value)
+            # Store the tier object so the view can reuse it without a second query
+            self._tier = TicketTier.objects.get(id=value)
         except TicketTier.DoesNotExist:
-            raise serializers.ValidationError(
-                "Ticket tier does not exist."
-            )
-        if not tier.is_available:
-            raise serializers.ValidationError(
-                "This ticket tier is not available."
-            )
+            raise serializers.ValidationError("Ticket tier does not exist.")
+
+        if not self._tier.is_available:
+            raise serializers.ValidationError("This ticket tier is not available.")
+
         return value
 
     def validate_phone_number(self, value):
-        # Format phone number to 254XXXXXXXXX
-        if value.startswith('0'):
-            value = '254' + value[1:]
-        elif value.startswith('+'):
-            value = value[1:]
-        if not value.startswith('254'):
-            raise serializers.ValidationError(
-                "Phone number must be a valid Kenyan number."
-            )
+        """
+        Lightweight pre-clean only — strips obvious formatting characters.
+        Full normalisation and strict length validation is handled by
+        normalise_phone() in mpesa.py inside the view, so we don't
+        duplicate logic here.
+        """
+        value = value.strip().replace(" ", "").replace("-", "")
+        if not value:
+            raise serializers.ValidationError("Phone number may not be blank.")
         return value
 
 

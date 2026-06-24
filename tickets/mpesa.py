@@ -22,18 +22,13 @@ def get_access_token() -> str:
 
 
 def stk_push(phone_number: str, amount: int, account_reference: str, description: str) -> dict:
-    timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
+    timestamp    = datetime.now().strftime("%Y%m%d%H%M%S")
     raw_password = f"{settings.MPESA_SHORTCODE}{settings.MPESA_PASSKEY}{timestamp}"
-    password = base64.b64encode(raw_password.encode()).decode()
-     # ADD THESE LINES temporarily
-    print("BASE URL:", settings.MPESA_BASE_URL)
-    print("SHORTCODE:", settings.MPESA_SHORTCODE)
-    print("CONSUMER KEY:", settings.MPESA_CONSUMER_KEY)
-    print("CALLBACK:", settings.MPESA_CALLBACK_URL)
+    password     = base64.b64encode(raw_password.encode()).decode()
 
     access_token = get_access_token()
 
-    url = f"{settings.MPESA_BASE_URL}/mpesa/stkpush/v1/processrequest"
+    url     = f"{settings.MPESA_BASE_URL}/mpesa/stkpush/v1/processrequest"
     headers = {"Authorization": f"Bearer {access_token}"}
 
     payload = {
@@ -58,14 +53,27 @@ def stk_push(phone_number: str, amount: int, account_reference: str, description
 
 
 def normalise_phone(raw: str) -> str:
+    """
+    Normalise a Kenyan phone number to the 254XXXXXXXXX format required by Daraja.
+
+    Accepted input formats:
+      - 07XXXXXXXX  (local format, Safaricom / Airtel)
+      - 01XXXXXXXX  (local format, Airtel)
+      - +2547XXXXXXXX
+      - 2547XXXXXXXX
+    """
     phone = raw.strip().replace(" ", "").replace("-", "")
+
     if phone.startswith("+"):
         phone = phone[1:]
+
     if phone.startswith("07") or phone.startswith("01"):
         phone = "254" + phone[1:]
+
     if not phone.startswith("254") or len(phone) != 12:
         raise ValueError(
             f"Invalid phone number '{raw}'. "
             "Expected formats: 07XXXXXXXX, +2547XXXXXXXX, or 2547XXXXXXXX"
         )
+
     return phone
