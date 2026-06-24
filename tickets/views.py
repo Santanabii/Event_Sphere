@@ -12,6 +12,7 @@ from .models import Ticket, MpesaTransaction
 from .serializers import TicketSerializer, InitiatePurchaseSerializer
 from .mpesa import stk_push, normalise_phone
 from .utils import send_ticket_email
+from users.models import User
 
 logger = logging.getLogger(__name__)
 
@@ -205,8 +206,8 @@ class ScanTicketView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def post(self, request):
-        # Restrict to staff / admin users only
-        if not request.user.is_staff:
+        # Allow Django admins (is_staff) OR users with the Gate Staff role
+        if not (request.user.is_staff or request.user.role == User.Role.STAFF):
             return Response(
                 {"error": "You do not have permission to scan tickets."},
                 status=status.HTTP_403_FORBIDDEN
