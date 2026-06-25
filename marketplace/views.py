@@ -17,6 +17,7 @@ from .serializers import (
     InitiateResalePurchaseSerializer
 )
 from tickets.models import Ticket
+from django.conf import settings
 from tickets.mpesa import stk_push
 
 logger = logging.getLogger(__name__)
@@ -144,7 +145,8 @@ class InitiateResalePurchaseView(APIView):
                 phone_number=phone_number,
                 amount=int(listing.asking_price),
                 account_reference=f"EVSR{listing.id}",
-                description=f"Resale ticket for {listing.ticket.tier.event.title}"
+                description=f"Resale ticket for {listing.ticket.tier.event.title}",
+                callback_url=settings.MPESA_RESALE_CALLBACK_URL
             )
         except Exception as exc:
             logger.exception("Resale STK Push failed: %s", exc)

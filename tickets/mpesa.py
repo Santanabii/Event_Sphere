@@ -21,7 +21,7 @@ def get_access_token() -> str:
     return token
 
 
-def stk_push(phone_number: str, amount: int, account_reference: str, description: str) -> dict:
+def stk_push(phone_number: str, amount: int, account_reference: str, description: str, callback_url: str = None) -> dict:
     timestamp    = datetime.now().strftime("%Y%m%d%H%M%S")
     raw_password = f"{settings.MPESA_SHORTCODE}{settings.MPESA_PASSKEY}{timestamp}"
     password     = base64.b64encode(raw_password.encode()).decode()
@@ -40,7 +40,7 @@ def stk_push(phone_number: str, amount: int, account_reference: str, description
         "PartyA":            phone_number,
         "PartyB":            settings.MPESA_SHORTCODE,
         "PhoneNumber":       phone_number,
-        "CallBackURL":       settings.MPESA_CALLBACK_URL,
+        "CallBackURL":       callback_url or settings.MPESA_CALLBACK_URL,
         "AccountReference":  account_reference[:12],
         "TransactionDesc":   description[:13],
     }
