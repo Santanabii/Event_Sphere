@@ -185,10 +185,23 @@ class ResaleMpesaCallbackView(APIView):
     permission_classes = [permissions.AllowAny]
 
     def post(self, request):
-        stk_callback = request.data.get('Body', {}).get('stkCallback', {})
-        result_code = stk_callback.get('ResultCode')
-        result_desc = stk_callback.get('ResultDesc', '')
+        stk_callback        = request.data.get('Body', {}).get('stkCallback', {})
         checkout_request_id = stk_callback.get('CheckoutRequestID', '')
+        result_desc         = stk_callback.get('ResultDesc', '')
+
+        # Normalise ResultCode — Daraja sends an integer but guard against
+        # strings or a missing key so we never silently drop a successful payment.
+        raw_code = stk_callback.get('ResultCode')
+        if raw_code is None:
+            logger.error("Resale callback missing ResultCode | CheckoutRequestID=%s", checkout_request_id)
+            return Response({"ResultCode": 0, "ResultDesc": "Accepted"})
+
+        try:
+            result_code = int(raw_code)
+        except (TypeError, ValueError):
+            logger.error("Unparseable ResultCode '%s' | CheckoutRequestID=%s",
+                         raw_code, checkout_request_id)
+            return Response({"ResultCode": 0, "ResultDesc": "Accepted"})
 
         logger.info(
             "Resale Callback | CheckoutRequestID=%s | ResultCode=%s",
@@ -273,7 +286,7 @@ class ResalePaymentStatusView(APIView):
             )
 
             response_data = {
-                "status": tx.status,
+                "status":  tx.status,
                 "receipt": tx.mpesa_receipt,
             }
 
@@ -283,39 +296,21 @@ class ResalePaymentStatusView(APIView):
                     resale_order = tx.listing.resale_order
                     ticket = tx.listing.ticket
                     response_data.update({
-                        "new_qr_token": str(resale_order.new_qr_token),
-                        "amount_paid": str(resale_order.amount_paid),
-                        "platform_fee": str(resale_order.platform_fee),
+                        "new_qr_token":  str(resale_order.new_qr_token),
+                        "amount_paid":   str(resale_order.amount_paid),
+                        "platform_fee":  str(resale_order.platform_fee),
                         "seller_payout": str(resale_order.seller_payout),
-                        "event_title": ticket.tier.event.title,
-                        "event_venue": ticket.tier.event.venue,
-                        "event_date": ticket.tier.event.date,
-                        "tier_name": ticket.tier.name,
-                        "ticket_id": ticket.id,
+                        "event_title":   ticket.tier.event.title,
+                        "event_venue":   ticket.tier.event.venue,
+                        "event_date":    ticket.tier.event.date,
+                        "tier_name":     ticket.tier.name,
+                        "ticket_id":     ticket.id,
                     })
                 except Exception as e:
-                    pass
+                    logger.error("Failed to attach resale order details: %s", e)
 
             return Response(response_data)
 
-        except ResaleMpesaTransaction.DoesNotExist:
-            return Response(
-                {"error": "Transaction not found."},
-                status=status.HTTP_404_NOT_FOUND
-            )
-    """Frontend polls this to check if resale M-Pesa callback has arrived."""
-    permission_classes = [permissions.IsAuthenticated]
-
-    def get(self, request, checkout_request_id):
-        try:
-            tx = ResaleMpesaTransaction.objects.get(
-                checkout_request_id=checkout_request_id,
-                buyer=request.user
-            )
-            return Response({
-                "status": tx.status,
-                "receipt": tx.mpesa_receipt,
-            })
         except ResaleMpesaTransaction.DoesNotExist:
             return Response(
                 {"error": "Transaction not found."},

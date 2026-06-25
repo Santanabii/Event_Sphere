@@ -175,46 +175,27 @@ class PaymentStatusView(APIView):
             )
 
             response_data = {
-                "status": tx.status,
+                "status":  tx.status,
                 "receipt": tx.mpesa_receipt,
-                "desc": tx.result_desc,
+                "desc":    tx.result_desc,
             }
 
             # If completed, include the full ticket details
             if tx.status == 'completed' and tx.ticket:
                 ticket = tx.ticket
                 response_data.update({
-                    "ticket_id": ticket.id,
-                    "qr_token": str(ticket.qr_token),
-                    "event_title": ticket.tier.event.title,
-                    "event_venue": ticket.tier.event.venue,
-                    "event_date": ticket.tier.event.date,
-                    "tier_name": ticket.tier.name,
+                    "ticket_id":      ticket.id,
+                    "qr_token":       str(ticket.qr_token),
+                    "event_title":    ticket.tier.event.title,
+                    "event_venue":    ticket.tier.event.venue,
+                    "event_date":     ticket.tier.event.date,
+                    "tier_name":      ticket.tier.name,
                     "purchase_price": str(ticket.purchase_price),
-                    "issued_at": ticket.issued_at,
+                    "issued_at":      ticket.issued_at,
                 })
 
             return Response(response_data)
 
-        except MpesaTransaction.DoesNotExist:
-            return Response(
-                {"error": "Transaction not found."},
-                status=status.HTTP_404_NOT_FOUND
-            )
-    """Frontend polls this to check if M-Pesa callback has arrived."""
-    permission_classes = [permissions.IsAuthenticated]
-
-    def get(self, request, checkout_request_id):
-        try:
-            tx = MpesaTransaction.objects.get(
-                checkout_request_id=checkout_request_id,
-                owner=request.user
-            )
-            return Response({
-                "status":  tx.status,
-                "receipt": tx.mpesa_receipt,
-                "desc":    tx.result_desc,
-            })
         except MpesaTransaction.DoesNotExist:
             return Response(
                 {"error": "Transaction not found."},
