@@ -271,6 +271,47 @@ class ResalePaymentStatusView(APIView):
                 checkout_request_id=checkout_request_id,
                 buyer=request.user
             )
+
+            response_data = {
+                "status": tx.status,
+                "receipt": tx.mpesa_receipt,
+            }
+
+            # If completed, include the new ticket details
+            if tx.status == 'completed':
+                try:
+                    resale_order = tx.listing.resale_order
+                    ticket = tx.listing.ticket
+                    response_data.update({
+                        "new_qr_token": str(resale_order.new_qr_token),
+                        "amount_paid": str(resale_order.amount_paid),
+                        "platform_fee": str(resale_order.platform_fee),
+                        "seller_payout": str(resale_order.seller_payout),
+                        "event_title": ticket.tier.event.title,
+                        "event_venue": ticket.tier.event.venue,
+                        "event_date": ticket.tier.event.date,
+                        "tier_name": ticket.tier.name,
+                        "ticket_id": ticket.id,
+                    })
+                except Exception as e:
+                    pass
+
+            return Response(response_data)
+
+        except ResaleMpesaTransaction.DoesNotExist:
+            return Response(
+                {"error": "Transaction not found."},
+                status=status.HTTP_404_NOT_FOUND
+            )
+    """Frontend polls this to check if resale M-Pesa callback has arrived."""
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request, checkout_request_id):
+        try:
+            tx = ResaleMpesaTransaction.objects.get(
+                checkout_request_id=checkout_request_id,
+                buyer=request.user
+            )
             return Response({
                 "status": tx.status,
                 "receipt": tx.mpesa_receipt,
