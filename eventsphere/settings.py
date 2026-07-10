@@ -165,6 +165,10 @@ CORS_ALLOWED_ORIGINS = [
     "https://eventsphere-frontend-iota.vercel.app",
 ]
 
+CORS_ALLOWED_ORIGIN_REGEXES = [
+    r"^https://eventsphere-frontend-.*-santanabiis-projects\.vercel\.app$",
+]
+
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
         'rest_framework_simplejwt.authentication.JWTAuthentication',
