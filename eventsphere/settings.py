@@ -161,7 +161,8 @@ STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:5173",
-     "https://saline-lark-dropout.ngrok-free.dev" 
+     "https://saline-lark-dropout.ngrok-free.dev",
+     "https://eventsphere-frontend-iota.vercel.app",
 
 ]
 
