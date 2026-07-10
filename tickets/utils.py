@@ -3,6 +3,7 @@ import io
 import base64
 from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import A4
+from reportlab.lib.utils import ImageReader
 from sendgrid import SendGridAPIClient
 from sendgrid.helpers.mail import (
     Mail, Attachment, FileContent,
@@ -70,11 +71,15 @@ def generate_pdf_ticket(ticket):
     )
 
     # QR Code
+    # drawInlineImage() requires a real PIL Image (it reads .format internally).
+    # A raw io.BytesIO has no .format attribute, which is exactly what was
+    # crashing here. ImageReader is built to accept file-like objects directly,
+    # so drawImage() + ImageReader is the correct pairing for a BytesIO buffer.
     qr_buffer = generate_qr_code(ticket.qr_token)
-    qr_image = qr_buffer.getvalue()
+    qr_buffer.seek(0)
 
-    p.drawInlineImage(
-        io.BytesIO(qr_image),
+    p.drawImage(
+        ImageReader(qr_buffer),
         width / 2 - 100,
         height - 460,
         200,
