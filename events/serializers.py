@@ -31,6 +31,16 @@ class EventSerializer(serializers.ModelSerializer):
         read_only=True
     )
 
+    # Declared explicitly because DRF's ModelSerializer has no built-in
+    # mapping for cloudinary.models.CloudinaryField — left to auto-generate,
+    # it falls back to a generic ModelField that hands the raw request value
+    # straight to Cloudinary's own to_python(), which expects a plain string
+    # and crashes with "expected string or bytes-like object, got 'dict'".
+    # A plain ImageField lets DRF handle the upload normally and just pass
+    # the file through to .save(), where CloudinaryField's own descriptor
+    # correctly takes over (same as it does in the Django admin).
+    banner_image = serializers.ImageField(required=False, allow_null=True)
+
     class Meta:
         model = Event
         fields = [
