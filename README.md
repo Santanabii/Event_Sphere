@@ -105,7 +105,6 @@ python -m venv venv
 source venv/bin/activate        # Windows (Git Bash): source venv/Scripts/activate
 pip install -r requirements.txt
 
-cp .env.example .env             # fill in the variables above
 python manage.py migrate
 python manage.py createsuperuser
 python manage.py runserver
@@ -128,11 +127,5 @@ tunneling to `localhost:8000`, with `DARAJA_CALLBACK_URL` pointed at the ngrok U
 5. Confirm `ALLOWED_HOSTS` and `CORS_ALLOWED_ORIGINS` include the exact deployed
    frontend domain (and any custom domain, once added)
 
-## Known integration points with the frontend
-
-- Frontend expects `access` and `refresh` fields in the login response body
-- Frontend derives its WebSocket URL by swapping `http→ws` / `https→wss` on the
-  API base URL — so the backend's WebSocket route must be reachable at the same
-  host as the REST API
-- 401 responses trigger an automatic token-refresh retry on the frontend — make
+h retry on the frontend — make
   sure expired/invalid tokens consistently return `401`, not `403` or `400`
