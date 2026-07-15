@@ -10,6 +10,50 @@ from tickets.models import Ticket
 logger = logging.getLogger(__name__)
 
 
+def _build_stats(event):
+    """
+    Single source of truth for the analytics payload shape — used by both
+    the initial REST fetch (EventAnalyticsView) and every live WebSocket
+    push (push_analytics_update), so the two can never drift out of sync
+    again like they had (push_analytics_update was previously missing
+    event_title, total_capacity, and tier_breakdown, which broke the
+    frontend the moment a live update replaced the initial full payload).
+    """
+    tiers = event.tiers.all()
+    total_sold = sum(tier.quantity_sold for tier in tiers)
+    total_capacity = sum(tier.quantity for tier in tiers)
+    total_revenue = sum(tier.quantity_sold * tier.price for tier in tiers)
+    checked_in = Ticket.objects.filter(
+        tier__event=event,
+        status='used'
+    ).count()
+
+    tier_breakdown = [
+        {
+            'name': tier.name,
+            'price': float(tier.price),
+            'quantity': tier.quantity,
+            'sold': tier.quantity_sold,
+            'remaining': tier.quantity_remaining,
+            'revenue': float(tier.quantity_sold * tier.price)
+        }
+        for tier in tiers
+    ]
+
+    return {
+        'event_id': event.id,
+        'event_title': event.title,
+        'total_sold': total_sold,
+        'total_capacity': total_capacity,
+        'total_revenue': float(total_revenue),
+        'checked_in': checked_in,
+        'checkin_rate': round(
+            (checked_in / total_sold * 100) if total_sold > 0 else 0, 1
+        ),
+        'tier_breakdown': tier_breakdown
+    }
+
+
 class EventAnalyticsView(APIView):
     """REST endpoint — organiser fetches analytics for their event."""
     permission_classes = [permissions.IsAuthenticated]
@@ -26,41 +70,7 @@ class EventAnalyticsView(APIView):
                 status=404
             )
 
-        tiers = event.tiers.all()
-        total_sold = sum(tier.quantity_sold for tier in tiers)
-        total_capacity = sum(tier.quantity for tier in tiers)
-        total_revenue = sum(
-            tier.quantity_sold * tier.price for tier in tiers
-        )
-        checked_in = Ticket.objects.filter(
-            tier__event=event,
-            status='used'
-        ).count()
-
-        tier_breakdown = [
-            {
-                'name': tier.name,
-                'price': float(tier.price),
-                'quantity': tier.quantity,
-                'sold': tier.quantity_sold,
-                'remaining': tier.quantity_remaining,
-                'revenue': float(tier.quantity_sold * tier.price)
-            }
-            for tier in tiers
-        ]
-
-        return Response({
-            'event_id': event.id,
-            'event_title': event.title,
-            'total_sold': total_sold,
-            'total_capacity': total_capacity,
-            'total_revenue': float(total_revenue),
-            'checked_in': checked_in,
-            'checkin_rate': round(
-                (checked_in / total_sold * 100) if total_sold > 0 else 0, 1
-            ),
-            'tier_breakdown': tier_breakdown
-        })
+        return Response(_build_stats(event))
 
 
 def push_analytics_update(event_id):
@@ -71,25 +81,7 @@ def push_analytics_update(event_id):
     try:
         channel_layer = get_channel_layer()
         event = Event.objects.get(id=event_id)
-        tiers = event.tiers.all()
-
-        total_sold = sum(tier.quantity_sold for tier in tiers)
-        checked_in = Ticket.objects.filter(
-            tier__event=event,
-            status='used'
-        ).count()
-
-        data = {
-            'event_id': event_id,
-            'total_sold': total_sold,
-            'checked_in': checked_in,
-            'checkin_rate': round(
-                (checked_in / total_sold * 100) if total_sold > 0 else 0, 1
-            ),
-            'total_revenue': float(sum(
-                tier.quantity_sold * tier.price for tier in tiers
-            ))
-        }
+        data = _build_stats(event)
 
         async_to_sync(channel_layer.group_send)(
             f'analytics_{event_id}',

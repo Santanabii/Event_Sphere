@@ -32,6 +32,13 @@ class ListingSerializer(serializers.ModelSerializer):
         read_only=True
     )
 
+    # These only resolve to a value once a listing's status is 'sold' — a
+    # ResaleOrder is created in ResaleMpesaCallbackView at the moment payment
+    # completes, so null is the correct/expected value for 'open' or
+    # 'cancelled' listings, not a bug.
+    seller_payout = serializers.SerializerMethodField()
+    platform_fee = serializers.SerializerMethodField()
+
     class Meta:
         model = Listing
         fields = [
@@ -39,12 +46,21 @@ class ListingSerializer(serializers.ModelSerializer):
             'listed_at', 'expires_at',
             'event_title', 'event_date',
             'event_venue', 'tier_name',
-            'original_price', 'seller_username'
+            'original_price', 'seller_username',
+            'seller_payout', 'platform_fee'
         ]
         read_only_fields = [
             'status', 'listed_at',
             'seller_username'
         ]
+
+    def get_seller_payout(self, obj):
+        order = getattr(obj, 'resale_order', None)
+        return str(order.seller_payout) if order else None
+
+    def get_platform_fee(self, obj):
+        order = getattr(obj, 'resale_order', None)
+        return str(order.platform_fee) if order else None
 
 
 class CreateListingSerializer(serializers.ModelSerializer):
@@ -127,4 +143,3 @@ class InitiateResalePurchaseSerializer(serializers.Serializer):
                 "Phone number must be a valid Kenyan number."
             )
         return value
-
