@@ -28,10 +28,10 @@ class InitiatePurchaseView(APIView):
         tier_id      = serializer.validated_data['tier_id']
         phone_number = serializer.validated_data['phone_number']
 
-        # Use the validated tier stored on the serializer — no second DB hit
+        
         tier = serializer._tier
 
-        # Normalise & strictly validate the phone number before hitting Daraja
+        
         try:
             phone_number = normalise_phone(phone_number)
         except ValueError as exc:
