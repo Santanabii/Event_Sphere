@@ -31,7 +31,6 @@ analytics/      organiser dashboard stats + live WebSocket feed
 
 ## API endpoints
 
-These are confirmed directly from the frontend's API client — not guessed.
 
 ### Auth — `/api/users/`
 | Method | Path | Description |
@@ -82,7 +81,6 @@ These are confirmed directly from the frontend's API client — not guessed.
 
 ## Environment variables
 
-⚠️ Names below follow standard conventions for these packages — confirm against
 your actual `settings.py`.
 
 | Variable | Purpose |
@@ -100,7 +98,7 @@ your actual `settings.py`.
 
 ## Local setup
 
-⚠️ Standard Django flow — confirm these match your actual project structure:
+
 
 ```bash
 python -m venv venv
@@ -116,16 +114,6 @@ python manage.py runserver
 For M-Pesa callbacks to reach your local machine, you'll need **ngrok** (or similar)
 tunneling to `localhost:8000`, with `DARAJA_CALLBACK_URL` pointed at the ngrok URL.
 
-## Running with WebSockets locally
-
-Since Channels needs an ASGI server, `python manage.py runserver` alone may not
-fully serve WebSocket connections depending on your `asgi.py`/routing setup.
-⚠️ If your analytics WebSocket doesn't connect locally, check whether you need
-`daphne` explicitly:
-
-```bash
-daphne -b 0.0.0.0 -p 8000 your_project_name.asgi:application
-```
 
 ## Deployment (Render)
 
